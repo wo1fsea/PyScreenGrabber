@@ -11,7 +11,7 @@ Description:
 
 import sys
 
-from PyQt5.QtCore import pyqtSignal, pyqtSlot, QPoint, QRect, QSize, Qt
+from PyQt5.QtCore import pyqtSignal, QPoint, QRect, QSize, Qt
 from PyQt5.QtGui import QPixmap, QPainter, QColor
 from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QRubberBand
 
@@ -40,6 +40,8 @@ class ScreenGrabber(QLabel):
         self._limit_rect = QRect(0, 0, screen_width, screen_height) if not limit_rect else limit_rect
 
         screen_shot = screen.grabWindow(0, 0, 0, screen_width, screen_height)
+        screen_shot = screen_shot.scaled(screen_width, screen_height)
+
         pixmap = QPixmap(screen_shot)
 
         # make mask
@@ -76,7 +78,6 @@ class ScreenGrabber(QLabel):
         self.setPixmap(pixmap)
         self.setScaledContents(True)
         self.setAlignment(Qt.AlignCenter)
-        self.resize(pixmap.width(), pixmap.height())
         self.setGeometry(0, 0, screen_width, screen_height)
         self.setWindowFlags(Qt.WindowStaysOnTopHint)
         self.showFullScreen()
@@ -87,11 +88,6 @@ class ScreenGrabber(QLabel):
 
         self.setParent(self._parent)
         rect = self._rubber_band.geometry()
-        rect.setTop(rect.top() * self._pixmap.width() / self.width())
-        rect.setLeft(rect.left() * self._pixmap.height() / self.height())
-        rect.setBottom(rect.bottom() * self._pixmap.width() / self.width())
-        rect.setRight(rect.right() * self._pixmap.height() / self.height())
-
         result_pixmap = self._pixmap.copy(rect)
         self.grabbed.emit(result_pixmap)
 
@@ -133,7 +129,7 @@ if __name__ == '__main__':
             super(MainWindow, self).__init__()
             self.setGeometry(0, 0, 0, 0)
 
-            self.screen_grabber = ScreenGrabber(self)
+            self.screen_grabber = ScreenGrabber(self, QRect(100, 100, 500, 500))
             self.screen_grabber.grabbed.connect(self.save)
 
         def save(self, pixmap):
