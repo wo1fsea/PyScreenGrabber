@@ -19,7 +19,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QRubberBand
 class ScreenGrabber(QLabel):
     grabbed = pyqtSignal(QPixmap)
 
-    def __init__(self, parent):
+    def __init__(self, parent, limit_rect=None):
         self._parent = parent
         super(ScreenGrabber, self).__init__(None)
         self._rubber_band = QRubberBand(QRubberBand.Rectangle, self)
@@ -37,21 +37,46 @@ class ScreenGrabber(QLabel):
         screen = screens[0]
         screen_size = screen.size()
         screen_width, screen_height = screen_size.width(), screen_size.height()
+        self._limit_rect = QRect(0, 0, screen_width, screen_height) if not limit_rect else limit_rect
 
-        pixmap = screen.grabWindow(0, 0, 0, screen_width, screen_height)
-        pixmap0 = QPixmap(pixmap)
-        pixmap1 = QPixmap(pixmap.width(), pixmap.height())
-        pixmap1.fill((QColor(0, 0, 0, 128)))
+        screen_shot = screen.grabWindow(0, 0, 0, screen_width, screen_height)
+        pixmap = QPixmap(screen_shot)
+
+        # make mask
+        mask_pixmap = QPixmap(screen_shot.width(), screen_shot.height())
+        mask_color = QColor(0, 0, 0, 64)
+        mask_pixmap.fill(mask_color)
+        mask_painter = QPainter()
+        mask_painter.begin(mask_pixmap)
+        mask_painter.fillRect(
+            QRect(QPoint(0, 0), QPoint(self._limit_rect.left() - 1, self._limit_rect.bottom() - 1)),
+            mask_color
+        )
+        mask_painter.fillRect(
+            QRect(QPoint(self._limit_rect.left(), 0), QPoint(screen_width - 1, self._limit_rect.top() - 1)),
+            mask_color
+        )
+        mask_painter.fillRect(
+            QRect(QPoint(0, self._limit_rect.bottom()), QPoint(self._limit_rect.right() - 1, screen_height - 1)),
+            mask_color
+        )
+        mask_painter.fillRect(
+            QRect(QPoint(self._limit_rect.right(), self._limit_rect.top()),
+                  QPoint(screen_width - 1, screen_height - 1)),
+            mask_color
+        )
+        mask_painter.end()
+
         painter = QPainter()
-        painter.begin(pixmap0)
-        painter.drawPixmap(0, 0, pixmap1)
+        painter.begin(pixmap)
+        painter.drawPixmap(0, 0, mask_pixmap)
         painter.end()
 
-        self._pixmap = pixmap
-        self.setPixmap(pixmap0)
+        self._pixmap = screen_shot
+        self.setPixmap(pixmap)
         self.setScaledContents(True)
         self.setAlignment(Qt.AlignCenter)
-        self.resize(pixmap0.width(), pixmap0.height())
+        self.resize(pixmap.width(), pixmap.height())
         self.setGeometry(0, 0, screen_width, screen_height)
         self.setWindowFlags(Qt.WindowStaysOnTopHint)
         self.showFullScreen()
@@ -78,14 +103,24 @@ class ScreenGrabber(QLabel):
         if not self._rubber_band.geometry().isEmpty():
             return
 
-        self._origin = event.pos()
+        pos = event.pos()
+        pos = QPoint(
+            min(self._limit_rect.right(), max(self._limit_rect.left(), pos.x())),
+            min(self._limit_rect.bottom(), max(self._limit_rect.top(), pos.y()))
+        )
+        self._origin = QPoint(pos)
         self._rubber_band.setGeometry(QRect(self._origin, QSize()))
         self._changing_rubber_band = True
 
     def mouseMoveEvent(self, event):
         super(ScreenGrabber, self).mouseMoveEvent(event)
+        pos = event.pos()
+        pos = QPoint(
+            min(self._limit_rect.right(), max(self._limit_rect.left(), pos.x())),
+            min(self._limit_rect.bottom(), max(self._limit_rect.top(), pos.y()))
+        )
         if self._changing_rubber_band:
-            self._rubber_band.setGeometry(QRect(self._origin, event.pos()).normalized())
+            self._rubber_band.setGeometry(QRect(self._origin, pos).normalized())
 
     def mouseReleaseEvent(self, event):
         super(ScreenGrabber, self).mouseReleaseEvent(event)
